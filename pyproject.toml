@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "splm-tm"
+version = "3.3.0"
+description = "S-PLM-TM protein sequence embeddings and retrieval"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.24,<3", "torch>=2.0,<3"]
+
+[project.optional-dependencies]
+dataframe = ["pandas>=1.5"]
+align = ["numba>=0.57"]
+
+[project.scripts]
+splmtm = "splm_tm.cli:main"
+splm = "splm_tm.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["code"]
+include = ["splm_tm*", "splm_backbone*"]
+namespaces = true
+
+[tool.setuptools.data-files]
+"pfam_data" = ["pfam_data/Pfam-A.clans.tsv"]

@@ -1,0 +1,83 @@
+{
+  "what": "Scoring the released embeddings on a different machine, with no GPU and without the model, and comparing against the published per-query results.",
+  "date": "2026-11-20",
+  "how": [
+    "prepare_data_public.py --hf-dir <large_scale> --out <pack>",
+    "score_from_embeddings.py --data <pack> --embeddings <large_scale/embeddings> --work <work> --query-block-size 0",
+    "evaluate.py --data <pack> --scores <work>/scores.npy --out <work>/evaluation"
+  ],
+  "environment": "CPU only, NumPy BLAS, one full 957 x 430,140 query-matrix product. The published run scored the same vectors on different hardware.",
+  "queries": 957,
+  "summary": {
+    "A": {
+      "MAP": {
+        "published": 0.6380800025881367,
+        "reproduced": 0.6380798777102324,
+        "difference": -1.2487790423953982e-07,
+        "equal_at_three_decimals": true
+      },
+      "P@1": {
+        "published": 0.8443051201671892,
+        "reproduced": 0.8443051201671892,
+        "difference": 0.0,
+        "equal_at_three_decimals": true
+      },
+      "P@10": {
+        "published": 0.8049111807732497,
+        "reproduced": 0.8048066875653083,
+        "difference": -0.00010449320794148065,
+        "equal_at_three_decimals": true
+      }
+    },
+    "B": {
+      "MAP": {
+        "published": 0.6199861084224535,
+        "reproduced": 0.6199853462487958,
+        "difference": -7.621736577423377e-07,
+        "equal_at_three_decimals": true
+      },
+      "P@1": {
+        "published": 0.8202716823406478,
+        "reproduced": 0.8202716823406478,
+        "difference": 0.0,
+        "equal_at_three_decimals": true
+      },
+      "P@10": {
+        "published": 0.7791013584117031,
+        "reproduced": 0.7789968652037618,
+        "difference": -0.00010449320794136963,
+        "equal_at_three_decimals": true
+      }
+    }
+  },
+  "verdict": "Every reported metric agrees to three decimals, the precision the paper reports. P@1 is bit-identical. MAP differs by about 1e-7 and P@10 by 1.045e-04, which is 0.1/957: one query's tenth hit changes because two float32 scores tie differently under a different BLAS.",
+  "per_query_comparison": {
+    "compared": 7656,
+    "differing": 1232,
+    "exact_match": false,
+    "by_metric": {
+      "AP": 1230,
+      "P@10": 2
+    },
+    "max_abs_difference": 0.10000000000000009,
+    "median_abs_difference": 4.806723108430333e-08,
+    "by_decade": {
+      "1e-1": 2,
+      "1e-10": 11,
+      "1e-14": 2,
+      "1e-16": 352,
+      "1e-17": 108,
+      "1e-18": 41,
+      "1e-19": 28,
+      "1e-20": 6,
+      "1e-3": 9,
+      "1e-4": 20,
+      "1e-5": 172,
+      "1e-6": 267,
+      "1e-7": 114,
+      "1e-8": 73,
+      "1e-9": 27
+    },
+    "note": "evaluate.py compares per-query values exactly and therefore exits with NOT VERIFIED here. That is expected on the embedding path: the score matrix is a GEMM over float32 vectors, so its last bits depend on the BLAS. Compare your summary with the values above instead."
+  }
+}

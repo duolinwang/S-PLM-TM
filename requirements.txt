@@ -1,0 +1,44 @@
+# S-PLM-TM — runtime dependencies.
+#
+# This list was derived by running a full sequence -> emb_raw/emb_tm/emb_ec pass in a
+# working environment and recording which packages were actually imported, not by
+# reading the source. Static inspection over-reports badly here: splm_backbone
+# vendors a large module tree, and most of it is never executed.
+#
+# Version floors below are the versions that pass was run with. The upper bounds are
+# deliberate:
+#   transformers <5     — the 5.x line requires huggingface_hub >=1.5, which is not
+#                         what this was tested against.
+#   huggingface_hub <1  — transformers 4.x requires <1.0; installing a 2.x hub breaks
+#                         `import transformers` outright.
+#   numpy <2            — torch 2.2 is not built against the numpy 2 ABI.
+#
+# torch_geometric and torch_scatter must be built against your PyTorch and CUDA
+# versions. If pip cannot resolve them from this file, install them first following
+# https://pytorch-geometric.readthedocs.io/en/latest/install/installation.html
+# They are needed at import time (structure tower) but take no part in sequence-only
+# encoding.
+
+torch>=2.0,<3
+torchvision
+transformers>=4.30,<5
+huggingface_hub>=0.24,<1
+sentencepiece
+accelerate
+peft
+numpy>=1.24,<2
+scipy
+pyyaml
+biopython
+torch_geometric
+torch_scatter
+
+# Residue-level candidate alignment only. The alignment kernel is numba-jitted;
+# embedding, index building and search never import it.
+numba>=0.57
+
+# Required at import time by the vendored config parser
+# (splm_backbone/utils/utils_v6.py imports all of these at module level, and
+# load_configs goes through it). Nothing here is ever called — but the import
+# has to succeed.
+python-box

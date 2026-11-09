@@ -1,0 +1,298 @@
+# S-PLM-TM —— 发布 checkpoint（splm_tm_backbone.pth）的**架构配置**。
+#
+# 这份文件只保留构建模型所需的键：
+#   model          网络结构（序列塔 / adapter / GVP / projector 的全部超参）
+#   train_settings 这里只读 mixed_precision 与 temperature
+#   optimizer      load_configs() 会硬性读取 weight_decay / eps / beta_1 / beta_2
+#   result_path    日志落盘位置
+#
+# 其余的段与加载这个 checkpoint 无关，已从这里移除。
+
+result_path: ./results/
+
+model:
+  compile_model: False
+  class_num_projector: 2
+  residue_out_dim: 64
+  protein_out_dim: 256
+  residue_num_projector: 1
+  protein_num_projector: 2
+
+  seq_encoder:
+    # ProtT5：只用 encoder（表征任务用不到 decoder，加载时直接丢掉，省一半显存）
+    model_name: Rostlab/prot_t5_xl_uniref50
+    prefix: null                   # ProstT5 才需要 "<AA2fold>"；ProtT5 不用
+    max_length: 512
+    residue_inner_dim: 1024
+    protein_inner_dim: 4096
+    adapter_h:
+      enable: True
+      num_end_adapter_layers: 12   # 最后 12/24 个 T5Block 并联 adapter
+      module_type: "MLP1"
+      bottleneck: 64
+      dropout: 0
+      esm2_style: True             # 默认初始化 + 输出 LayerNorm（不是零初始化）
+      n_per_layer: 1               # 每层 1 个；可训练 adapter 合计 1.61M
+      scale_to_input: True         # adapter 输出按输入 RMS 等比缩放
+      gain_init: 0.44              # 目标 adapter/hidden 幅度比。T5 隐状态 RMS 很大
+                                   #  （实测 68.4），不做等比缩放 adapter 的相对影响力
+                                   #  只有 0.0144，会被幅度失配锁死。
+    gradient_checkpointing: True   # ProtT5 必需：T5 注意力强制 fp32 softmax，
+                                   #  671MB/层 × 多次前向 -> 80GB A100 会 OOM
+    pool_mode: "2"                 # 真实氨基酸上的均值池化（排 pad 与 eos）
+    MLM:
+      enable: False                # 不做 MLM 还原；掩码只作 seq2seq BYOL 的增强视图
+      mask_ratio: 0.15
+      mode: "predict"
+
+  struct_encoder:
+    version: "randomperturb"
+    class_inner_dim: 1024
+    residue_inner_dim: 1024
+    protein_inner_dim: 4096
+    robust_norm:
+      use_robust_norm: True
+      robust_norm_type: 'instance'
+      percentile_range: [25, 75]
+      warmup_steps: -1
+      warmup_strategy: 'none'
+    fine_tuning:
+      enable: True
+    fine_tuning_projct:
+      enable: True
+    use_rotary_embeddings: True
+    rotary_mode: 2
+    use_foldseek: False
+    use_foldseek_vector: True
+    gvp_num_layers: 3
+    top_k: 30
+    num_rbf: 16
+    num_positional_embeddings: 16
+    node_h_dim: (256,32)
+    edge_h_dim: (32,1)
+    use_seq:
+      enable: False
+      seq_embed_mode: "Atchleyfactor"
+      seq_embed_dim: 5
+    lora:
+      enable: False
+      r: 8
+      alpha: 32
+      dropout: 0.05
+      resume:
+        enable: False
+        checkpoint_path: path/to/checkpoints
+
+    # ── Perceiver pooling：禁用（预训练阶段一致变差）──────────────────────────
+    perceiver_pool:
+      enable: False
+      n_latents: 32
+      n_heads: 4
+      n_self_attn_layers: 1
+      use_dist_pe: true
+
+    # ── Structural aux losses：纯 gvp2seq（self-modal），关 seq2gvp ────────────
+    struct_aux:
+      contact_weight: 0.0
+      dist_weight_seq2gvp: 0     # 反作用，关闭
+      dist_weight_gvp2seq: 0.2   # self-modal distogram，赢微生物 Top-10
+      shape_weight_seq2gvp: 0    # 反作用，关闭
+      shape_weight_gvp2seq: 0
+      n_pairs: 256
+      contact_threshold: 8.0
+      min_seq_sep: 12
+      n_dist_bins: 64            # AlphaFold2 standard
+
+  struct_decoder:
+    projector:
+      r_inner_dim: 1024
+      r_num_layers: 1
+      r_out_dim: 64
+      p_inner_dim: 4096
+      p_num_layers: 2
+      p_out_dim: 256
+    seq2gvp_predictor:
+      r_inner_dim: 1024
+      r_num_layers: 1
+      r_out_dim: 64
+      p_inner_dim: 4096
+      p_num_layers: 1
+      p_out_dim: 256
+    gvp2gvp_predictor:
+      r_inner_dim: 1024
+      r_num_layers: 1
+      r_out_dim: 64
+      p_inner_dim: 4096
+      p_num_layers: 1
+      p_out_dim: 256
+    mode: "gvp"
+    noise_prob: 0.01
+    mlm_probability: 0.15
+    mix_prob: 0.6
+
+  seq_decoder:
+    projector:
+      r_inner_dim: 4096
+      r_num_layers: 2
+      r_out_dim: 64
+      p_inner_dim: 6144
+      p_num_layers: 4
+      p_out_dim: 256
+    seq2seq_predictor:
+      r_inner_dim: 1024
+      r_num_layers: 1
+      r_out_dim: 64
+      p_inner_dim: 4096
+      p_num_layers: 1
+      p_out_dim: 256
+    gvp2seq_predictor:
+      r_inner_dim: 1024
+      r_num_layers: 1
+      r_out_dim: 64
+      p_inner_dim: 4096
+      p_num_layers: 1
+      p_out_dim: 256
+    mlm_prob: 0.25
+
+  byol_diff:
+    vicreg:
+      r_enable: False
+      p_enable: True
+      lambda_var: 0.0
+      mu: 25.0
+      nu: 1.0
+      pairdist_weight: 0.3   # 与 phase2.vicreg_pairdist_weight 一致（phase2 会覆盖）
+    GeomLoss:
+      r_enable: False
+      p_enable: False
+      loss: "sinkhorn"
+      p: 2
+      blur: 0.05
+    simclr:
+      r_enable: False
+      p_enable: True         # soft SimCLR由phase2.soft_simclr.enable控制
+    byol:
+      r_enable: False
+      p_enable: False
+    flow:
+      r_enable: True
+      p_enable: True
+      flow_layers: 2
+      time_dim: 128
+      flow_hidden_dim: 512
+      flow_num_head: 8
+      use_original_time_dependent: True
+      use_condition: False      # condition 就是 x0 -> v=(x_t-c)/t 闭式可解
+      fix_sigma: True           # 走关键字传参分支
+      sigma_min: 0.00001        # r = sigma_min/sigma_max = 1e-5（Lipman OT-CFM）
+                                #  注意写字面量 0.00001：PyYAML 会把 1e-5 解析成字符串
+      sigma_max: 1.0
+      norm_type: 'LN'
+      MLP_hidden_dim: 1024
+      gradient_checking: True
+      use_qk_norm: True
+      seq2gvp:
+        useuncertaintyflow: False
+      gvp2seq:
+        useuncertaintyflow: False
+      flow_net_type: "crossflow_dimr"
+
+  byol_same:
+    vicreg:
+      r_enable: False
+      p_enable: False
+      lambda_var: 1.0
+      mu: 1.0
+      nu: 1.0
+      pairdist_weight: 1
+    GeomLoss:
+      r_enable: False
+      p_enable: False
+      loss: "sinkhorn"
+      p: 2
+      blur: 0.05
+    simclr:
+      r_enable: False
+      p_enable: False
+    byol:
+      r_enable: True
+      p_enable: True
+    flow:
+      r_enable: False
+      p_enable: False
+      flow_hidden_dim: 256
+      flow_layers: 1
+      time_dim: 32
+      flow_num_head: 4
+      use_original_time_dependent: True
+      use_condition: True
+      norm_type: 'LN'
+      MLP_hidden_dim: 1024
+      gradient_checking: True
+      use_qk_norm: True
+      seq2seq:
+        useuncertaintyflow: False
+      gvp2gvp:
+        useuncertaintyflow: False
+      flow_net_type: "crossflow_dimr"
+
+
+train_settings:
+  label_path: path/to/labels    # 加载 checkpoint 时不读
+  data_path: path/to/data       # 加载 checkpoint 时不读
+  early_stopping_threshold: 200
+  shuffle: True
+  mixed_precision: "fp16"
+  batch_size: 20
+  residue_batch_size: 2000
+  num_workers: 1
+  gradient_accumulation: 1
+  n_views: 2
+  temperature: 0.1
+  plddt_weight: False
+  plddt_weight_mode: "all"
+  num_iter: 3
+  checkbest_step: 100
+  reinit_proj_every_k_steps: 5000
+  byol:
+    gvp2gvp_w: 1
+    seq2seq_w: 1
+    gvp2seq_w: 1
+    seq2gvp_w: 1
+    same_predictor: False
+  load_gvp2seq_flownet: False
+  load_gvp2gvp_flownet: False
+  load_seq2seq_flownet: False
+  load_seq2gvp_flownet: False
+
+
+optimizer:
+  name: sgd
+  train_struct_aux_heads: True  # aux distogram 头进 optimizer 并在
+                                #  reinit 时保留；
+                                #  lr 走 utils_v6.py 兜底 = projector_r(0.01)
+  seq_lr:
+    esm2_encoder: 0.001
+    projector_r: 0.01
+    projector_p: 0.01
+    flow_net_r: 0.01
+    flow_net_p: 0.01
+  struct_lr:
+    gvp_encoder: 0.01
+    projector_r: 0.01
+    projector_p: 0.01
+    flow_net_r: 0.01
+    flow_net_p: 0.01
+  weight_decay: 0.0005
+  eps: 1e-16
+  beta_1: 0.9
+  beta_2: 0.999
+  use_8bit_adam: False
+  grad_clip_norm: 1
+  min_lr_ratio: 0.01
+  decay:
+    warmup: 10
+    max_lr_seq: 0.01
+    max_lr_struct: 0.01
+    gamma: 1
+    first_cycle_steps: 2000

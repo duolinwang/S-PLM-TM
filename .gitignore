@@ -1,0 +1,17 @@
+# ── 模型权重不进 git ────────────────────────────────────────────────
+# backbone 单文件 2.2 GB，远超 GitHub 的 100 MB 单文件硬上限。
+# 四个权重的出处与 md5 记在 models/MODEL_CARD.md；取法见 README.md。
+*.pth
+*.pt
+
+# ── 运行产物 ────────────────────────────────────────────────────────
+*.npz
+__pycache__/
+*.pyc
+smoke_out/
+fig7_*/            # reproduce/ec_deer_figure7 的 work 目录
+*_out.npz
+code/tests/_tmp_*/
+*.egg-info/
+build/
+dist/

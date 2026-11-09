@@ -1,0 +1,11 @@
+# 统一按 LF 存库，检出时按平台转换 —— 否则 Windows 上提交会把整个仓库变成 CRLF，
+# 集群上的 .sh 会因为 $'\r' 直接跑不起来。
+* text=auto eol=lf
+
+# 这些必须始终是 LF：要在 Linux 集群上执行
+*.sh text eol=lf
+
+# 数据文件按原样，不做行尾转换
+*.fasta -text
+*.csv   -text
+*.tsv   -text
